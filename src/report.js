@@ -33,7 +33,7 @@ function printFinding(f, indent) {
 export function printReport(result, { version }) {
   const { configs, counts, serverCount, score } = result;
   console.log();
-  console.log(`${c.bold('mcpguard')} ${c.dim('v' + version)} — MCP security scan`);
+  console.log(`${c.bold('safemcp')} ${c.dim('v' + version)} — MCP security scan`);
   console.log();
 
   if (!configs.length) {

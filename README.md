@@ -1,11 +1,11 @@
-# mcpguard
+# safemcp
 
-[![test](https://github.com/0x1903/mcpguard/actions/workflows/test.yml/badge.svg)](https://github.com/0x1903/mcpguard/actions/workflows/test.yml) [![npm](https://img.shields.io/npm/v/mcpguard)](https://www.npmjs.com/package/mcpguard) [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![test](https://github.com/0x1903/safemcp/actions/workflows/test.yml/badge.svg)](https://github.com/0x1903/safemcp/actions/workflows/test.yml) [![npm](https://img.shields.io/npm/v/safemcp)](https://www.npmjs.com/package/safemcp) [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 **Is your AI agent setup safe?** One command scans every MCP server you've connected to Claude, Cursor, VS Code or Windsurf and tells you what could go wrong.
 
 ```bash
-npx mcpguard
+npx safemcp
 ```
 
 Runs locally, needs no account, sends nothing anywhere. Secrets are always masked in the output.
@@ -50,16 +50,16 @@ Score: 74/100  1 config file(s), 3 server(s)  2 high, 1 medium
 ## Options
 
 ```bash
-mcpguard --file path/to/config.json   # scan a specific file
-mcpguard --dir ./some/repo            # find and scan every MCP config under a folder
-mcpguard --json                       # machine-readable output
-mcpguard --fail-on high               # exit 1 on high+ findings (for CI)
+safemcp --file path/to/config.json   # scan a specific file
+safemcp --dir ./some/repo            # find and scan every MCP config under a folder
+safemcp --json                       # machine-readable output
+safemcp --fail-on high               # exit 1 on high+ findings (for CI)
 ```
 
 ### CI
 
 ```yaml
-- run: npx mcpguard --file .mcp.json --fail-on high
+- run: npx safemcp --file .mcp.json --fail-on high
 ```
 
 ## Roadmap

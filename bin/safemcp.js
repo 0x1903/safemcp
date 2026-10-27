@@ -6,9 +6,9 @@ import { SEVERITIES } from '../src/rules.js';
 
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
-const HELP = `mcpguard v${version} — scan MCP server configs for security risks
+const HELP = `safemcp v${version} — scan MCP server configs for security risks
 
-Usage: mcpguard [scan] [options]
+Usage: safemcp [scan] [options]
 
 Options:
   -f, --file <path>      Scan a specific config file (repeatable). Default: auto-detect
