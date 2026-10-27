@@ -1,6 +1,6 @@
 {
   "name": "safemcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Scan your local MCP server configs (Claude, Cursor, VS Code, Windsurf) for security risks in one command.",
   "type": "module",
   "bin": {
