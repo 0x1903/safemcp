@@ -93,7 +93,7 @@ npx safemcp pin --write    # apply it (keeps a .safemcp-bak copy of each file)
 ~/.cursor/mcp.json
   playwright: @playwright/mcp@latest  →  @playwright/mcp@0.0.83
   serena: git+https://github.com/oraios/serena  →  git+https://github.com/oraios/serena@7b65d82…
-  fetch: mcp-server-fetch  →  mcp-server-fetch==2025.4.7
+  fetch: mcp-server-fetch  →  mcp-server-fetch==2026.10.24
 ```
 
 Works for `npx`, `bunx`, `pnpm dlx`, `uvx`, `pipx run` and git sources (pinned to a commit), in JSON, JSONC and TOML configs; comments and formatting are kept. Version ranges like `^1.2` are left for you to pin by hand.
