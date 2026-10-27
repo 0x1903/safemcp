@@ -71,3 +71,12 @@ safemcp --fail-on high               # exit 1 on high+ findings (for CI)
 ## License
 
 MIT
+
+## Releasing
+
+Releases are published from GitHub Actions via npm trusted publishing (no tokens, with provenance):
+
+```bash
+npm version patch   # bumps package.json and creates the vX.Y.Z tag
+git push --follow-tags
+```
