@@ -1,0 +1,13 @@
+{
+  // VS Code style: "servers" key, comments and trailing commas
+  "servers": {
+    "remote": {
+      "type": "http",
+      "url": "http://mcp.example.com/mcp",
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory@2025.4.25"],
+    },
+  },
+}

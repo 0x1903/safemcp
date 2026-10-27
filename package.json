@@ -1,0 +1,36 @@
+{
+  "name": "mcpguard",
+  "version": "0.1.0",
+  "description": "Scan your local MCP server configs (Claude, Cursor, VS Code, Windsurf) for security risks in one command.",
+  "type": "module",
+  "bin": {
+    "mcpguard": "bin/mcpguard.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "scan": "node bin/mcpguard.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "security",
+    "scanner",
+    "claude",
+    "cursor",
+    "ai-agents"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0x1903/mcpguard.git"
+  },
+  "homepage": "https://github.com/0x1903/mcpguard#readme",
+  "bugs": "https://github.com/0x1903/mcpguard/issues",
+  "license": "MIT"
+}
