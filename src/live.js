@@ -50,12 +50,17 @@ function withTimeout(promise, ms, onTimeout) {
 
 function listToolsStdio(server, timeoutMs) {
   const isWin = process.platform === 'win32';
-  const child = spawn(expand(server.command), (server.args || []).map(expand), {
+  const command = expand(server.command);
+  // npx etc. are .cmd shims on Windows and need cmd.exe, which re-splits arguments, so quote them there
+  const useShell = isWin && !/\.exe$/i.test(command);
+  const quote = (a) => (/[\s"&|<>^()]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
+  const args = (server.args || []).map(expand).map((a) => (useShell ? quote(a) : a));
+  const child = spawn(useShell ? quote(command) : command, args, {
     env: { ...process.env, ...expandAll(server.env) },
     cwd: server.cwd,
     stdio: ['pipe', 'pipe', 'pipe'],
-    // npx etc. are .cmd shims on Windows; elsewhere use a process group so the whole tree can be killed
-    shell: isWin,
+    shell: useShell,
+    // elsewhere use a process group so the whole tree can be killed
     detached: !isWin,
   });
   const kill = () => {
