@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "weather-plus": {
+      "command": "node",
+      "args": ["examples/poisoned-server.js"],
+      "env": { "WEATHER_API_KEY": "wx_live_7f3a9c2e81b4d6f0" }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/"]
+    },
+    "notes": {
+      "type": "http",
+      "url": "http://notes.mcp-demo.invalid/mcp"
+    }
+  }
+}

@@ -1,7 +1,7 @@
 {
   "name": "safemcp",
-  "version": "0.1.1",
-  "description": "Scan your local MCP server configs (Claude, Cursor, VS Code, Windsurf) for security risks in one command.",
+  "version": "0.2.0",
+  "description": "Scan your MCP servers (Claude, Cursor, VS Code, Windsurf) for tool poisoning, hidden instructions, rug pulls and risky configs in one command.",
   "type": "module",
   "bin": {
     "safemcp": "bin/safemcp.js"
@@ -24,7 +24,9 @@
     "scanner",
     "claude",
     "cursor",
-    "ai-agents"
+    "ai-agents",
+    "tool-poisoning",
+    "prompt-injection"
   ],
   "repository": {
     "type": "git",
