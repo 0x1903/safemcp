@@ -80,6 +80,24 @@ What your agent may do **without asking you** matters as much as which servers i
 | MCP010 | high | Packages impersonating the official `@modelcontextprotocol` scope |
 | MCP011 | medium | Config files containing secrets that other users can read |
 
+## Fix unpinned packages: `safemcp pin`
+
+Half of the MCP configs we sampled on GitHub run packages like `npx some-server` or `@latest`, so every launch runs whatever was published last — the way a compromised release reaches your machine. `safemcp pin` locks each one to the exact version that is current now:
+
+```bash
+npx safemcp pin            # show the plan
+npx safemcp pin --write    # apply it (keeps a .safemcp-bak copy of each file)
+```
+
+```
+~/.cursor/mcp.json
+  playwright: @playwright/mcp@latest  →  @playwright/mcp@0.0.83
+  serena: git+https://github.com/oraios/serena  →  git+https://github.com/oraios/serena@7b65d82…
+  fetch: mcp-server-fetch  →  mcp-server-fetch==2025.4.7
+```
+
+Works for `npx`, `bunx`, `pnpm dlx`, `uvx`, `pipx run` and git sources (pinned to a commit), in JSON, JSONC and TOML configs; comments and formatting are kept. Version ranges like `^1.2` are left for you to pin by hand.
+
 ## Try it on a poisoned server
 
 The repo ships a deliberately poisoned (but harmless) MCP server — the one in the demo above:

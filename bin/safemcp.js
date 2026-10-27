@@ -3,12 +3,21 @@ import { readFileSync } from 'node:fs';
 import { scan, addLive } from '../src/scan.js';
 import { printReport } from '../src/report.js';
 import { SEVERITIES } from '../src/rules.js';
+import { planPins, applyPins } from '../src/pin.js';
+import { tildify } from '../src/discover.js';
 
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
 const HELP = `safemcp v${version} — scan MCP server configs for security risks
 
 Usage: safemcp [scan] [options]
+       safemcp pin [--write] [--file <path>] [--dir <path>]
+
+Commands:
+  scan (default)         Check MCP servers, agent settings and instruction files
+  pin                    Pin unpinned MCP packages (npx/uvx/pnpm dlx/pipx run, git sources) to
+                         the exact version that is current now. Shows the plan; add --write to
+                         apply it (a .safemcp-bak copy of each changed file is kept).
 
 Options:
   -f, --file <path>      Scan a specific config file (repeatable). Default: auto-detect
@@ -30,10 +39,12 @@ Options:
 Secrets are always masked in output.`;
 
 function parseArgs(argv) {
-  const opts = { files: [], dirs: [], toolsFiles: [], json: false, failOn: null, live: false, pin: true, timeout: 20 };
+  const opts = { command: 'scan', files: [], dirs: [], toolsFiles: [], json: false, failOn: null, live: false, pin: true, timeout: 20, write: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === 'scan') continue;
+    if (a === 'scan' && i === 0) continue;
+    else if (a === 'pin' && i === 0) opts.command = 'pin';
+    else if (a === '--write') opts.write = true;
     else if (a === '-h' || a === '--help') opts.help = true;
     else if (a === '-v' || a === '--version') opts.version = true;
     else if (a === '--json') opts.json = true;
@@ -68,6 +79,38 @@ if (opts.help) {
 if (opts.version) {
   console.log(version);
   process.exit(0);
+}
+
+if (opts.command === 'pin') {
+  await pin(opts);
+  process.exit(0);
+}
+
+async function pin({ files, dirs, write, json }) {
+  const { configs } = scan({ files, dirs });
+  const plan = await planPins(configs.filter((c) => c.kind === 'mcp'));
+  const written = write ? applyPins(plan) : [];
+  if (json) {
+    console.log(JSON.stringify({ plan, written }, null, 2));
+    return;
+  }
+  if (!plan.length) {
+    console.log('\nAll MCP packages are already pinned. Nothing to do.\n');
+    return;
+  }
+  console.log();
+  for (const file of [...new Set(plan.map((p) => p.file))]) {
+    console.log(tildify(file));
+    for (const p of plan.filter((x) => x.file === file)) {
+      const name = p.scope ? `${p.server} (${p.scope})` : p.server;
+      console.log(p.to ? `  ${name}: ${p.from}  \u2192  ${p.to}` : `  ${name}: ${p.from}  \u2014 skipped: ${p.error}`);
+    }
+  }
+  const ok = plan.filter((p) => p.to).length;
+  console.log();
+  if (write) console.log(`Pinned ${ok} package(s) in ${written.length} file(s). Backups: <file>.safemcp-bak. Restart your AI client to apply.`);
+  else console.log(`${ok} package(s) can be pinned. Run \`safemcp pin --write\` to apply (backups are kept).`);
+  console.log('Pinning freezes today\'s version — review it, and re-run this after updating on purpose.\n');
 }
 
 let result = scan({ files: opts.files, dirs: opts.dirs, toolsFiles: opts.toolsFiles });
