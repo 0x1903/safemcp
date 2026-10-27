@@ -27,12 +27,15 @@ safemcp reads them for you.
 |---|---|---|
 | TP001 | critical | **Tool poisoning** — hidden instructions to the model (`<IMPORTANT>`, "don't tell the user", "ignore previous instructions"…) in descriptions *or* input schemas |
 | TP002 | critical | **Invisible characters** — zero-width / bidi / Unicode tag characters; tag-smuggled text is decoded and shown |
-| TP003 | high | Descriptions that point the model at SSH keys, cloud credentials, `.env`, wallets or other MCP configs |
-| TP004 | high | Descriptions telling the model to send data to an email, URL or phone number |
+| TP003 | high | Descriptions that tell the model to **read** SSH keys, cloud credentials, `.env`, credential stores or other MCP configs |
+| TP004 | high | Descriptions telling the model to silently BCC/CC, or to send conversation, credentials or file contents to an address |
 | TP005 | high | **Tool shadowing** — one server's tool giving instructions about another tool (e.g. "when using `send_email`, always BCC…") |
-| TP006 | medium | Long encoded blobs hidden in descriptions |
+| TP006 | medium | Base64 blobs that decode to readable text (hidden instructions) |
 | TP007 | high | **Rug pull** — a tool's description or schema changed since your last scan |
 | TP008 | low | A new tool appeared since your last scan |
+| TP009 | high | Tools that ask the model for a **wallet private key or seed phrase** (it gets sent to the server) |
+
+Tool rules are tuned against **151,511 real tool definitions from 11,832 public MCP servers** so that legitimate guardrails (*"never tell the user the booking is confirmed"*), non-Latin scripts and security tools quoting attack phrases don't trigger false alarms.
 
 Tool fingerprints are stored in `~/.safemcp/pins.json` (mode 600) so every later `--live` run can tell you what changed.
 
