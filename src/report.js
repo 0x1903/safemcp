@@ -68,7 +68,10 @@ export function printReport(result, { version }) {
     console.log(`${c.cyan('●')} ${c.bold(cfg.client)}  ${c.dim(tildify(cfg.file))}`);
     if (cfg.error) console.log(`    ${c.yellow(cfg.error)}`);
     for (const f of cfg.fileFindings) printFinding(f, '    ');
-    if (!cfg.servers.length && !cfg.error) console.log(c.dim('    no MCP servers configured'));
+    if (!cfg.servers.length && !cfg.error && !cfg.fileFindings.length) {
+      const clean = { settings: 'no risky agent settings', instructions: 'no hidden or suspicious instructions' }[cfg.kind];
+      console.log(clean ? `    ${c.green('\u2713')} ${c.dim(clean)}` : c.dim('    no MCP servers configured'));
+    }
     for (const s of cfg.servers) {
       let label = s.scope ? `${s.name} ${c.dim('(' + s.scope + ')')}` : s.name;
       if (s.live?.error) label += c.dim(`  live: ${s.live.error}`);

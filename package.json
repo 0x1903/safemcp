@@ -1,7 +1,7 @@
 {
   "name": "safemcp",
   "version": "0.2.1",
-  "description": "Scan your MCP servers (Claude, Cursor, VS Code, Windsurf) for tool poisoning, hidden instructions, rug pulls and risky configs in one command.",
+  "description": "Security scanner for AI agents: MCP servers, agent trust settings and instruction files for Claude Code, Codex, Gemini CLI, Cursor, VS Code, Windsurf, Cline and Roo. Catches tool poisoning, rug pulls and risky auto-approvals.",
   "type": "module",
   "bin": {
     "safemcp": "bin/safemcp.js"
@@ -26,7 +26,11 @@
     "cursor",
     "ai-agents",
     "tool-poisoning",
-    "prompt-injection"
+    "prompt-injection",
+    "codex",
+    "gemini-cli",
+    "cline",
+    "agents-md"
   ],
   "repository": {
     "type": "git",

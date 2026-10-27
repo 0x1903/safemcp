@@ -245,6 +245,26 @@ export const RULES = [
         : [];
     },
   },
+  {
+    id: 'MCP012',
+    severity: 'high',
+    title: 'Tool calls from this server run without asking you',
+    fix: 'Remove the auto-approval and confirm tool calls yourself. A poisoned description or prompt injection can then act without you seeing it.',
+    check(s) {
+      const out = [];
+      // Gemini CLI: "trust": true bypasses every confirmation for the server
+      if (s.trust === true) out.push('"trust": true skips all tool confirmations');
+      // Cline: autoApprove, Roo Code: alwaysAllow (lists of tool names)
+      for (const key of ['autoApprove', 'alwaysAllow']) {
+        if (Array.isArray(s[key]) && s[key].length) out.push(`${key} pre-approves ${s[key].length} tool(s): ${s[key].slice(0, 5).join(', ')}${s[key].length > 5 ? ', …' : ''}`);
+      }
+      // Codex: per-server and per-tool approval modes
+      if (s.default_tools_approval_mode === 'approve') out.push('default_tools_approval_mode = "approve" for every tool');
+      const tools = s.tools && typeof s.tools === 'object' ? Object.entries(s.tools).filter(([, t]) => t?.approval_mode === 'approve') : [];
+      if (tools.length) out.push(`approval_mode = "approve" for ${tools.map(([n]) => n).slice(0, 5).join(', ')}`);
+      return out;
+    },
+  },
 ];
 
 // File-level check, run once per config file after server rules.

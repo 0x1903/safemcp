@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { parseToml } from './toml.js';
 
 const home = os.homedir();
 
@@ -22,6 +23,23 @@ export function candidatePaths(cwd = process.cwd()) {
     { client: 'VS Code', file: path.join(cfg, 'Code', 'User', 'mcp.json') },
     { client: 'VS Code (project)', file: path.join(cwd, '.vscode', 'mcp.json') },
     { client: 'Windsurf', file: path.join(home, '.codeium', 'windsurf', 'mcp_config.json') },
+    { client: 'Codex', file: path.join(process.env.CODEX_HOME || path.join(home, '.codex'), 'config.toml') },
+    { client: 'Codex (project)', file: path.join(cwd, '.codex', 'config.toml') },
+    { client: 'Gemini CLI', file: path.join(home, '.gemini', 'settings.json') },
+    { client: 'Gemini CLI (project)', file: path.join(cwd, '.gemini', 'settings.json') },
+    { client: 'Cline CLI', file: path.join(home, '.cline', 'data', 'settings', 'cline_mcp_settings.json') },
+    // Agent extensions keep their MCP settings in each VS Code-family editor's globalStorage
+    ...['Code', 'Code - Insiders', 'Cursor', 'Windsurf', 'VSCodium'].flatMap((editor) => {
+      const storage = path.join(cfg, editor, 'User', 'globalStorage');
+      return [
+        { client: `Cline (${editor})`, file: path.join(storage, 'saoudrizwan.claude-dev', 'settings', 'cline_mcp_settings.json') },
+        { client: `Roo Code (${editor})`, file: path.join(storage, 'rooveterinaryinc.roo-cline', 'settings', 'mcp_settings.json') },
+      ];
+    }),
+    // Agent settings: no servers, but they decide how much the agent is trusted (see agentrules.js)
+    { client: 'Claude Code settings', file: path.join(home, '.claude', 'settings.json') },
+    { client: 'Claude Code settings (project)', file: path.join(cwd, '.claude', 'settings.json') },
+    { client: 'Claude Code settings (local)', file: path.join(cwd, '.claude', 'settings.local.json') },
   ];
 }
 
@@ -68,15 +86,43 @@ export function stripJsonc(text) {
 
 function serversIn(obj) {
   if (!obj || typeof obj !== 'object') return {};
-  // plugin.json may point mcpServers at a separate file path instead of inlining them
-  const servers = obj.mcpServers || obj.servers;
+  // plugin.json may point mcpServers at a separate file path instead of inlining them;
+  // Codex's config.toml uses mcp_servers
+  const servers = obj.mcpServers || obj.servers || obj.mcp_servers;
   return servers && typeof servers === 'object' && !Array.isArray(servers) ? servers : {};
 }
 
 const looksLikeServer = (v) =>
   v && typeof v === 'object' && !Array.isArray(v) && ['command', 'url', 'serverUrl', 'httpUrl'].some((k) => k in v);
 
-const MCP_FILE_NAMES = new Set(['.mcp.json', 'mcp.json', 'mcp_config.json', 'claude_desktop_config.json', 'plugin.json']);
+const MCP_FILE_NAMES = new Set([
+  '.mcp.json',
+  'mcp.json',
+  'mcp_config.json',
+  'claude_desktop_config.json',
+  'plugin.json',
+  'cline_mcp_settings.json',
+  'mcp_settings.json',
+]);
+
+// Agent config files that are only recognisable together with their folder.
+const AGENT_FILES = { '.codex': ['config.toml'], '.claude': ['settings.json', 'settings.local.json'], '.gemini': ['settings.json'] };
+const isAgentFile = (p) => (AGENT_FILES[path.basename(path.dirname(p))] || []).includes(path.basename(p));
+
+// Which client a file belongs to, from its path (for --file / --dir, where we don't know it).
+export function inferClient(file) {
+  const base = path.basename(file);
+  const parent = path.basename(path.dirname(file));
+  const inHome = path.dirname(path.dirname(file)) === home;
+  if (parent === '.codex' && base === 'config.toml') return inHome ? 'Codex' : 'Codex (project)';
+  if (parent === '.claude' && base === 'settings.json') return inHome ? 'Claude Code settings' : 'Claude Code settings (project)';
+  if (parent === '.claude' && base === 'settings.local.json') return 'Claude Code settings (local)';
+  if (parent === '.gemini' && base === 'settings.json') return inHome ? 'Gemini CLI' : 'Gemini CLI (project)';
+  if (base === '.claude.json') return 'Claude Code';
+  if (base === 'cline_mcp_settings.json') return 'Cline';
+  if (base === 'mcp_settings.json') return 'Roo Code';
+  return null;
+}
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.venv', 'venv', '__pycache__']);
 
 // Recursively finds MCP config files under dir.
@@ -92,7 +138,7 @@ export function findMcpFiles(dir, maxDepth = 8) {
     for (const e of entries) {
       const p = path.join(d, e.name);
       if (e.isDirectory() && depth < maxDepth && !SKIP_DIRS.has(e.name)) walk(p, depth + 1);
-      else if (e.isFile() && MCP_FILE_NAMES.has(e.name)) found.push(p);
+      else if (e.isFile() && (MCP_FILE_NAMES.has(e.name) || isAgentFile(p))) found.push(p);
     }
   };
   walk(dir, 0);
@@ -114,7 +160,12 @@ export function tildify(p) {
   return p.startsWith(home) ? '~' + p.slice(home.length) : p;
 }
 
-// Returns { client, file, mode, error?, servers: [{ name, scope, server }] }
+// Codex names HTTP headers http_headers; the rules expect headers.
+const normalize = (server) =>
+  server && typeof server === 'object' && server.http_headers && !server.headers ? { ...server, headers: server.http_headers } : server;
+
+// Returns { client, file, mode, raw, error?, servers: [{ name, scope, server }] }.
+// raw is the parsed file for agent-trust rules; it may contain secrets and must never be printed.
 export function loadConfig(client, file) {
   const result = { client, file, mode: null, servers: [] };
   let text;
@@ -126,7 +177,7 @@ export function loadConfig(client, file) {
   }
   let obj;
   try {
-    obj = JSON.parse(stripJsonc(text));
+    obj = file.endsWith('.toml') ? parseToml(text) : JSON.parse(stripJsonc(text));
   } catch (e) {
     result.error = `Could not parse: ${e.message}`;
     return result;
@@ -136,8 +187,9 @@ export function loadConfig(client, file) {
   if (!Object.keys(top).length && path.basename(file) === '.mcp.json') {
     top = Object.fromEntries(Object.entries(obj).filter(([, v]) => looksLikeServer(v)));
   }
+  result.raw = obj;
   for (const [name, server] of Object.entries(top)) {
-    result.servers.push({ name, scope: null, server });
+    result.servers.push({ name, scope: null, server: normalize(server) });
   }
   // ~/.claude.json keeps per-project servers under projects[<path>].mcpServers
   if (obj.projects && typeof obj.projects === 'object') {
@@ -154,9 +206,9 @@ export function discover({ files, dirs, cwd } = {}) {
   let targets;
   if (files?.length || dirs?.length) {
     targets = [
-      ...(files || []).map((f) => ({ client: 'Custom', file: path.resolve(f) })),
+      ...(files || []).map((f) => ({ client: inferClient(path.resolve(f)) || 'Custom', file: path.resolve(f) })),
       ...(dirs || []).flatMap((d) =>
-        findMcpFiles(path.resolve(d)).map((file) => ({ client: pluginName(file), file })),
+        findMcpFiles(path.resolve(d)).map((file) => ({ client: inferClient(file) || pluginName(file), file })),
       ),
     ];
   } else {

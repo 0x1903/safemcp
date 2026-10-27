@@ -2,7 +2,7 @@
 
 [![test](https://github.com/0x1903/safemcp/actions/workflows/test.yml/badge.svg)](https://github.com/0x1903/safemcp/actions/workflows/test.yml) [![npm](https://img.shields.io/npm/v/safemcp)](https://www.npmjs.com/package/safemcp) [![downloads](https://img.shields.io/npm/dm/safemcp)](https://www.npmjs.com/package/safemcp) [![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](package.json) [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-**Is your AI agent setup safe?** One command scans every MCP server you've connected to Claude, Cursor, VS Code or Windsurf — and with `--live`, reads what each tool actually tells your model, catching tool poisoning, hidden instructions and rug pulls.
+**Is your AI agent setup safe?** One command checks the MCP servers, trust settings and instruction files of Claude Code, Claude Desktop, Codex, Gemini CLI, Cursor, VS Code, Windsurf, Cline and Roo Code — and with `--live`, reads what each tool actually tells your model, catching tool poisoning, hidden instructions and rug pulls.
 
 ```bash
 npx safemcp           # check your configs
@@ -39,7 +39,32 @@ Tool rules are tuned against **151,511 real tool definitions from 11,832 public 
 
 Tool fingerprints are stored in `~/.safemcp/pins.json` (mode 600) so every later `--live` run can tell you what changed.
 
-### Configuration
+### Agent trust settings
+
+What your agent may do **without asking you** matters as much as which servers it has.
+
+| ID | Severity | Check |
+|---|---|---|
+| AG001 | high | Claude Code starts in `bypassPermissions` mode |
+| AG002 | medium | The bypass-mode warning is switched off |
+| AG003 | high | `enableAllProjectMcpServers` — any cloned repo's `.mcp.json` servers start automatically |
+| AG004 | high | Allow rule for **every** shell command (`Bash` / `Bash(*)`), incl. "don't ask again" approvals in `~/.claude.json` |
+| AG005 | medium | Allow rule for **all** tools of an MCP server (`mcp__github`, `mcp__github__*`) |
+| AG006 | medium | Repository `.claude/settings.json` defines hooks (commands that run for everyone who opens it) |
+| AG007 | high | Codex `approval_policy = "never"` (critical together with AG008) |
+| AG008 | high | Codex `sandbox_mode = "danger-full-access"` |
+| MCP012 | high | Per-server auto-approval: Gemini CLI `trust: true`, Cline `autoApprove`, Roo Code `alwaysAllow`, Codex `approval_mode = "approve"` |
+
+### Agent instruction files
+
+`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.cursorrules`, `.cursor/rules/*.mdc`, `.windsurfrules`, `.clinerules` and `.github/copilot-instructions.md` are read by your agent in every session — which makes them a supply-chain target ([Rules File Backdoor](https://www.pillar.security/blog/new-vulnerability-in-github-copilot-and-cursor-how-hackers-can-weaponize-code-agents)).
+
+| ID | Severity | Check |
+|---|---|---|
+| AG010 | critical | Invisible text (Unicode tag characters, bidi overrides, zero-width runs) — decoded and shown |
+| AG011 | high | Instructions to hide things from you, send data elsewhere, or encoded text |
+
+### MCP configuration
 
 | ID | Severity | Check |
 |---|---|---|
@@ -66,17 +91,25 @@ npx safemcp --file examples/demo-config.json --live
 
 ## Where it looks
 
-- Claude Desktop, Claude Code (`~/.claude.json`, per-project servers, installed plugins, `.mcp.json`)
-- Cursor (`~/.cursor/mcp.json`, `.cursor/mcp.json`)
-- VS Code (user and `.vscode/mcp.json`, JSONC supported)
-- Windsurf (`~/.codeium/windsurf/mcp_config.json`)
+| Client | MCP servers | Trust settings |
+|---|---|---|
+| Claude Code | `~/.claude.json` (incl. per-project), `.mcp.json`, installed plugins | `~/.claude/settings.json`, `.claude/settings.json`, `.claude/settings.local.json` |
+| Claude Desktop | `claude_desktop_config.json` | |
+| Codex | `~/.codex/config.toml`, `.codex/config.toml` | approval policy, sandbox, per-tool approval |
+| Gemini CLI | `~/.gemini/settings.json`, `.gemini/settings.json` | per-server `trust` |
+| Cursor | `~/.cursor/mcp.json`, `.cursor/mcp.json` | |
+| VS Code | user `mcp.json`, `.vscode/mcp.json` (JSONC) | |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | |
+| Cline, Roo Code | extension settings in VS Code, Cursor, Windsurf, VSCodium; Cline CLI | `autoApprove`, `alwaysAllow` |
+
+Plus agent instruction files in the current project and your user-level `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` and `~/.gemini/GEMINI.md`. `--dir` finds all of the above recursively.
 
 ## Options
 
 ```bash
 safemcp --live                       # connect to each server and check its tools
 safemcp --file path/to/config.json   # scan a specific file
-safemcp --dir ./some/repo            # find and scan every MCP config under a folder
+safemcp --dir ./some/repo            # find and scan every MCP config, agent setting and instruction file under a folder
 safemcp --tools-file tools.json      # check a saved tools/list response offline
 safemcp --json                       # machine-readable output
 safemcp --fail-on high               # exit 1 on high+ findings (for CI)

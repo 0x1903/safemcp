@@ -5,6 +5,7 @@ import { checkServer, FILE_PERMS_RULE, SEVERITIES } from './rules.js';
 import { checkTools } from './toolrules.js';
 import { listTools } from './live.js';
 import { loadPins, savePins, diffPins } from './pins.js';
+import { checkAgentConfig, checkInstructionFile, instructionFiles, findInstructionFiles } from './agentrules.js';
 
 const WEIGHTS = { critical: 25, high: 10, medium: 4, low: 1 };
 
@@ -27,8 +28,18 @@ export function scan(opts = {}) {
       const { id, severity, title, fix } = FILE_PERMS_RULE;
       fileFindings.push({ id, severity, title, message: `Mode ${(cfg.mode & 0o777).toString(8)}`, fix });
     }
-    return { ...cfg, servers, fileFindings };
+    fileFindings.push(...checkAgentConfig(cfg));
+    const kind = cfg.client.startsWith('Claude Code settings') ? 'settings' : 'mcp';
+    return { ...cfg, kind, servers, fileFindings };
   });
+  // Agent instruction files: the project's (or --dir's) and the user's global ones; not with --file alone
+  if (!onlyToolsFiles && !(opts.files?.length && !opts.dirs?.length)) {
+    const files = opts.dirs?.length ? opts.dirs.flatMap((d) => findInstructionFiles(path.resolve(d))) : instructionFiles(opts.cwd);
+    for (const file of files) {
+      const fileFindings = checkInstructionFile(file);
+      if (fileFindings) configs.push({ client: 'Agent instructions', kind: 'instructions', file, servers: [], fileFindings });
+    }
+  }
   for (const file of opts.toolsFiles || []) configs.push(toolsFileConfig(file));
   return summarize(configs);
 }
