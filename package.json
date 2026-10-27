@@ -1,6 +1,6 @@
 {
   "name": "safemcp",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Security scanner for AI agents: MCP servers, agent trust settings and instruction files for Claude Code, Codex, Gemini CLI, Cursor, VS Code, Windsurf, Cline and Roo. Catches tool poisoning, rug pulls and risky auto-approvals.",
   "type": "module",
   "bin": {
