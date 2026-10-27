@@ -98,6 +98,28 @@ npx safemcp pin --write    # apply it (keeps a .safemcp-bak copy of each file)
 
 Works for `npx`, `bunx`, `pnpm dlx`, `uvx`, `pipx run` and git sources (pinned to a commit), in JSON, JSONC and TOML configs; comments and formatting are kept. Version ranges like `^1.2` are left for you to pin by hand.
 
+### Before you update: `safemcp pin --check`
+
+Pinned packages still need updates. `--check` tells you which have a newer release and whether that release shows **supply-chain warning signs** in the registry metadata — nothing is downloaded or run:
+
+```
+  ↑ fs: 2025.8.21 → 2.0.1 (released 2026-10-25)
+      ⚠ MEDIUM released less than 3 days ago: 65h ago
+      · LOW new dependencies: zod, @modelcontextprotocol/server
+  ✓ playwright: 0.0.83 is the latest
+```
+
+| Signal | Severity |
+|---|---|
+| New `preinstall` / `install` / `postinstall` script | high |
+| Provenance dropped (previous release was signed by CI, this one isn't) | high |
+| Published by a different account (moving *to* trusted publishing doesn't count) | medium |
+| Released less than 3 days ago — most malicious releases are caught within days | medium |
+| Package size jumped (>3× and >500 KB) | medium |
+| New dependencies | low |
+
+Exits with code 1 on high signals, so it works as a scheduled CI check.
+
 ## Try it on a poisoned server
 
 The repo ships a deliberately poisoned (but harmless) MCP server — the one in the demo above:

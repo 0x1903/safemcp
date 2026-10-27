@@ -106,3 +106,113 @@ export function applyPins(plan) {
   }
   return written;
 }
+
+// ---------------------------------------------------------------------------
+// `safemcp pin --check`: for pinned packages, is there a newer release, and does it look risky?
+// Uses registry metadata only — nothing is downloaded or run.
+
+const LIFECYCLE = ['preinstall', 'install', 'postinstall'];
+const DAY = 86400000;
+
+export const CHANGE_SIGNALS = {
+  installScript: { severity: 'high', title: 'adds an install script' },
+  provenanceDropped: { severity: 'high', title: 'no longer published with provenance' },
+  publisherChanged: { severity: 'medium', title: 'published by a different account' },
+  fresh: { severity: 'medium', title: 'released less than 3 days ago' },
+  sizeJump: { severity: 'medium', title: 'package size grew a lot' },
+  newDeps: { severity: 'low', title: 'new dependencies' },
+};
+const signal = (key, detail) => ({ ...CHANGE_SIGNALS[key], key, detail });
+
+export function npmChangeSignals(doc, from, to, now = Date.now()) {
+  const a = doc.versions?.[from] || {};
+  const b = doc.versions?.[to] || {};
+  const out = [];
+  const added = LIFECYCLE.filter((s) => b.scripts?.[s] && !a.scripts?.[s]);
+  if (added.length) out.push(signal('installScript', added.map((s) => `${s}: ${String(b.scripts[s]).slice(0, 80)}`).join('; ')));
+  if (a.dist?.attestations && !b.dist?.attestations) out.push(signal('provenanceDropped', `${from} had provenance, ${to} does not`));
+  const who = (v) => v._npmUser?.name;
+  // Moving to trusted publishing (e.g. "GitHub Actions" via OIDC) is an improvement, not a warning sign.
+  if (who(a) && who(b) && who(a) !== who(b) && !b._npmUser?.trustedPublisher) out.push(signal('publisherChanged', `${who(a)} → ${who(b)}`));
+  const age = now - (Date.parse(doc.time?.[to]) || 0);
+  if (age < 3 * DAY) out.push(signal('fresh', `${Math.max(1, Math.round(age / 3600000))}h ago`));
+  const [sa, sb] = [a.dist?.unpackedSize, b.dist?.unpackedSize];
+  if (sa && sb && sb > sa * 3 && sb - sa > 500_000) out.push(signal('sizeJump', `${Math.round(sa / 1024)} KB → ${Math.round(sb / 1024)} KB`));
+  const deps = Object.keys(b.dependencies || {}).filter((d) => !(d in (a.dependencies || {})));
+  if (deps.length) out.push(signal('newDeps', deps.slice(0, 8).join(', ')));
+  return out;
+}
+
+export function pypiChangeSignals(from, to, now = Date.now()) {
+  const out = [];
+  const age = now - (Date.parse(to.upload) || 0);
+  if (age < 3 * DAY) out.push(signal('fresh', `${Math.max(1, Math.round(age / 3600000))}h ago`));
+  const name = (r) => r.split(/[\s;<>=!~[(]/)[0].toLowerCase();
+  const before = new Set((from.requires || []).map(name));
+  const deps = (to.requires || []).map(name).filter((d) => d && !before.has(d));
+  if (deps.length) out.push(signal('newDeps', deps.slice(0, 8).join(', ')));
+  const [sa, sb] = [from.size, to.size];
+  if (sa && sb && sb > sa * 3 && sb - sa > 500_000) out.push(signal('sizeJump', `${Math.round(sa / 1024)} KB → ${Math.round(sb / 1024)} KB`));
+  return out;
+}
+
+async function pypiRelease(name, version) {
+  const j = await getJson(`https://pypi.org/pypi/${encodeURIComponent(name)}/${encodeURIComponent(version)}/json`);
+  return { requires: j.info.requires_dist || [], upload: j.urls?.[0]?.upload_time_iso_8601, size: Math.max(0, ...(j.urls || []).map((u) => u.size || 0)) };
+}
+
+export const checkRegistry = {
+  npmDoc: (name) => getJson(`https://registry.npmjs.org/${name.replace('/', '%2f')}`),
+  pypiLatest: registry.pypi,
+  pypiRelease,
+  git: gitHead,
+};
+
+// Returns [{ file, server, spec, current, latest?, signals, error? }] for every pinned package.
+export async function checkPins(configs, reg = checkRegistry, now = Date.now()) {
+  const results = [];
+  for (const cfg of configs) {
+    for (const s of cfg.servers) {
+      const p = packageSpec(s.server || {});
+      if (!p || !p.spec || !isPinned(p)) continue;
+      const item = { file: cfg.file, client: cfg.client, server: s.name, scope: s.scope, spec: p.spec, signals: [] };
+      try {
+        if (p.spec.startsWith('git+')) {
+          const [, url, sha] = /^git\+(.+)@([^@/]+)$/.exec(p.spec);
+          item.current = sha.slice(0, 12);
+          const head = await reg.git(url);
+          if (!head.startsWith(sha)) item.latest = head.slice(0, 12);
+        } else if (p.eco === 'npm') {
+          const at = p.spec.lastIndexOf('@');
+          const [name, current] = [p.spec.slice(0, at), p.spec.slice(at + 1)];
+          const doc = await reg.npmDoc(name);
+          const latest = doc['dist-tags']?.latest;
+          item.current = current;
+          // Only report releases newer than the pinned one (not e.g. a pin to a newer prerelease).
+          const time = (v) => Date.parse(doc.time?.[v]) || 0;
+          if (latest && latest !== current && time(latest) > time(current)) {
+            item.latest = latest;
+            item.released = doc.time?.[latest];
+            item.signals = npmChangeSignals(doc, current, latest, now);
+          }
+        } else {
+          const m = /^([A-Za-z0-9][\w.-]*)(?:\[[^\]]*\])?==(.+)$/.exec(p.spec);
+          if (!m) throw new Error('unrecognised pin');
+          const [, name, current] = m;
+          item.current = current;
+          const latest = await reg.pypiLatest(name);
+          if (latest !== current) {
+            const [from, to] = await Promise.all([reg.pypiRelease(name, current), reg.pypiRelease(name, latest)]);
+            item.latest = latest;
+            item.released = to.upload;
+            item.signals = pypiChangeSignals(from, to, now);
+          }
+        }
+      } catch (e) {
+        item.error = e.message;
+      }
+      results.push(item);
+    }
+  }
+  return results;
+}

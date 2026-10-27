@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { planPins, applyPins, splitNpm, splitPypi } from '../src/pin.js';
+import { planPins, applyPins, splitNpm, splitPypi, checkPins } from '../src/pin.js';
 import { scan } from '../src/scan.js';
 
 // Offline stand-in for npm, PyPI and git.
@@ -74,4 +74,45 @@ test('pin: plan and apply across JSONC and TOML, keeping comments and formatting
   // Re-scan: only the two packages we deliberately skipped are still unpinned.
   const unpinned = scan({ files: [jsonc, toml] }).configs.flatMap((c) => c.servers.filter((s) => s.findings.some((f) => f.id === 'MCP003')).map((s) => s.name));
   assert.deepEqual(unpinned.sort(), ['gone', 'rng']);
+});
+
+test('pin --check: supply-chain signals from registry metadata', async () => {
+  const now = Date.parse('2026-10-27T12:00:00Z');
+  const v = (o) => ({ dist: { unpackedSize: 50_000, attestations: { provenance: {} } }, _npmUser: { name: 'ci', trustedPublisher: { id: 'github' } }, ...o });
+  const doc = {
+    'dist-tags': { latest: '1.1.0' },
+    time: { '1.0.0': '2026-09-01T00:00:00Z', '1.1.0': '2026-10-26T20:00:00Z' },
+    versions: {
+      '1.0.0': v({}),
+      '1.1.0': v({
+        scripts: { postinstall: 'node collect.js', test: 'x' },
+        dist: { unpackedSize: 2_000_000 },
+        _npmUser: { name: 'someone-new' },
+        dependencies: { 'left-pad': '1' },
+      }),
+    },
+  };
+  const reg = { npmDoc: async () => doc, pypiLatest: async () => '0.2.0', pypiRelease: async (n, ver) => ({ requires: ver === '0.2.0' ? ['httpx>=1', 'mcp>=1'] : ['mcp>=1'], upload: '2026-01-01T00:00:00Z', size: 1000 }), git: async () => 'b'.repeat(40) };
+  const configs = [
+    {
+      file: 'x.json',
+      servers: [
+        { name: 'evil', server: { command: 'npx', args: ['some-mcp@1.0.0'] } },
+        { name: 'py', server: { command: 'uvx', args: ['mcp-thing==0.1.0'] } },
+        { name: 'git', server: { command: 'uvx', args: ['--from', `git+https://github.com/o/r@${'a'.repeat(40)}`, 'r'] } },
+        { name: 'unpinned', server: { command: 'npx', args: ['other-mcp'] } },
+      ],
+    },
+  ];
+  const results = await checkPins(configs, reg, now);
+  assert.deepEqual(results.map((r) => [r.server, r.current, r.latest, r.signals.map((s) => s.key)]), [
+    ['evil', '1.0.0', '1.1.0', ['installScript', 'provenanceDropped', 'publisherChanged', 'fresh', 'sizeJump', 'newDeps']],
+    ['py', '0.1.0', '0.2.0', ['newDeps']],
+    ['git', 'aaaaaaaaaaaa', 'bbbbbbbbbbbb', []],
+  ]);
+  assert.match(results[0].signals[0].detail, /postinstall: node collect\.js/);
+  // switching *to* trusted publishing is not a warning
+  const upgrade = { ...doc, versions: { '1.0.0': v({ _npmUser: { name: 'alice' }, dist: { unpackedSize: 50_000 } }), '1.1.0': v({}) }, time: { ...doc.time, '1.1.0': '2026-10-01T00:00:00Z' } };
+  const [r] = await checkPins([{ file: 'x', servers: [configs[0].servers[0]] }], { ...reg, npmDoc: async () => upgrade }, now);
+  assert.deepEqual(r.signals, []);
 });

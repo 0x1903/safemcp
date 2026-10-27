@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { scan, addLive } from '../src/scan.js';
 import { printReport } from '../src/report.js';
 import { SEVERITIES } from '../src/rules.js';
-import { planPins, applyPins } from '../src/pin.js';
+import { planPins, applyPins, checkPins } from '../src/pin.js';
 import { tildify } from '../src/discover.js';
 
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -12,12 +12,16 @@ const HELP = `safemcp v${version} — scan MCP server configs for security risks
 
 Usage: safemcp [scan] [options]
        safemcp pin [--write] [--file <path>] [--dir <path>]
+       safemcp pin --check [--file <path>] [--dir <path>]
 
 Commands:
   scan (default)         Check MCP servers, agent settings and instruction files
   pin                    Pin unpinned MCP packages (npx/uvx/pnpm dlx/pipx run, git sources) to
                          the exact version that is current now. Shows the plan; add --write to
                          apply it (a .safemcp-bak copy of each changed file is kept).
+  pin --check            For pinned packages: is there a newer release, and does it show
+                         supply-chain warning signs (new install script, lost provenance,
+                         different publisher, very fresh, size jump)? Exits 1 on high signals.
 
 Options:
   -f, --file <path>      Scan a specific config file (repeatable). Default: auto-detect
@@ -45,6 +49,7 @@ function parseArgs(argv) {
     if (a === 'scan' && i === 0) continue;
     else if (a === 'pin' && i === 0) opts.command = 'pin';
     else if (a === '--write') opts.write = true;
+    else if (a === '--check') opts.check = true;
     else if (a === '-h' || a === '--help') opts.help = true;
     else if (a === '-v' || a === '--version') opts.version = true;
     else if (a === '--json') opts.json = true;
@@ -86,8 +91,9 @@ if (opts.command === 'pin') {
   process.exit(0);
 }
 
-async function pin({ files, dirs, write, json }) {
+async function pin({ files, dirs, write, json, check }) {
   const { configs } = scan({ files, dirs });
+  if (check) return pinCheck(configs.filter((c) => c.kind === 'mcp'), json);
   const plan = await planPins(configs.filter((c) => c.kind === 'mcp'));
   const written = write ? applyPins(plan) : [];
   if (json) {
@@ -111,6 +117,36 @@ async function pin({ files, dirs, write, json }) {
   if (write) console.log(`Pinned ${ok} package(s) in ${written.length} file(s). Backups: <file>.safemcp-bak. Restart your AI client to apply.`);
   else console.log(`${ok} package(s) can be pinned. Run \`safemcp pin --write\` to apply (backups are kept).`);
   console.log('Pinning freezes today\'s version — review it, and re-run this after updating on purpose.\n');
+}
+
+async function pinCheck(configs, json) {
+  const results = await checkPins(configs);
+  const risky = results.some((r) => r.signals.some((s) => s.severity === 'high'));
+  if (json) {
+    console.log(JSON.stringify(results, null, 2));
+  } else if (!results.length) {
+    console.log('\nNo pinned MCP packages found. Run `safemcp pin` first.\n');
+  } else {
+    console.log();
+    const mark = { high: '\u2716', medium: '\u26A0', low: '\u00B7' };
+    for (const r of results) {
+      const name = r.scope ? `${r.server} (${r.scope})` : r.server;
+      if (r.error) console.log(`  ${name}: could not check (${r.error})`);
+      else if (!r.latest) console.log(`  \u2713 ${name}: ${r.current} is the latest`);
+      else {
+        const when = r.released ? ` (released ${r.released.slice(0, 10)})` : '';
+        console.log(`  \u2191 ${name}: ${r.current} \u2192 ${r.latest}${when}`);
+        for (const s of r.signals) console.log(`      ${mark[s.severity]} ${s.severity.toUpperCase()} ${s.title}: ${s.detail}`);
+        if (!r.signals.length) console.log('      no warning signs in the registry metadata');
+      }
+    }
+    console.log();
+    const updates = results.filter((r) => r.latest).length;
+    if (updates) console.log(`${updates} update(s) available. Review them, then update the pinned version in your config (or re-run \`safemcp pin\` after unpinning).`);
+    if (risky) console.log('High-risk signals found: do not update until you have checked what changed.');
+    console.log();
+  }
+  if (risky) process.exitCode = 1;
 }
 
 let result = scan({ files: opts.files, dirs: opts.dirs, toolsFiles: opts.toolsFiles });
