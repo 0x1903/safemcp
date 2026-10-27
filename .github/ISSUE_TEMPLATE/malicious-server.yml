@@ -1,0 +1,17 @@
+name: Malicious MCP server report
+description: Report an MCP server or package that is actively malicious
+labels: [malicious-server]
+body:
+  - type: markdown
+    attributes:
+      value: For undisclosed vulnerabilities in someone else's server, contact its maintainers first. For vulnerabilities in safemcp itself, use [private reporting](https://github.com/0x1903/safemcp/security/advisories/new).
+  - type: input
+    attributes: { label: Package or server, placeholder: "npm/PyPI name, repo URL or server URL" }
+    validations: { required: true }
+  - type: textarea
+    attributes: { label: Malicious behaviour, description: "What does it do? Paste the poisoned tool description if relevant." }
+    validations: { required: true }
+  - type: dropdown
+    attributes:
+      label: Did safemcp detect it?
+      options: ["Yes", "Partially", "No"]

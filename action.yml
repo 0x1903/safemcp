@@ -1,0 +1,44 @@
+name: safemcp
+description: Scan MCP server configs (and optionally live tool definitions) for tool poisoning, hidden instructions and risky settings.
+author: 0x1903
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  files:
+    description: Space-separated MCP config files to scan. Missing files are skipped.
+    default: .mcp.json .cursor/mcp.json .vscode/mcp.json
+  dir:
+    description: Optional folder to search recursively for MCP configs (instead of files).
+    default: ''
+  live:
+    description: Also start each server and check its tool definitions ("true"/"false"). Runs the configured servers.
+    default: 'false'
+  fail-on:
+    description: Fail the step on findings at or above this severity (critical | high | medium | low).
+    default: high
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+    # Inputs go through env vars, never interpolated into the script, to avoid script injection.
+    - shell: bash
+      env:
+        SAFEMCP_FILES: ${{ inputs.files }}
+        SAFEMCP_DIR: ${{ inputs.dir }}
+        SAFEMCP_LIVE: ${{ inputs.live }}
+        SAFEMCP_FAIL_ON: ${{ inputs.fail-on }}
+        FORCE_COLOR: '1'
+      run: |
+        args=()
+        if [ -n "$SAFEMCP_DIR" ]; then
+          args+=(--dir "$SAFEMCP_DIR")
+        else
+          for f in $SAFEMCP_FILES; do args+=(--file "$f"); done
+        fi
+        if [ "$SAFEMCP_LIVE" = "true" ]; then args+=(--live --no-pin); fi
+        node "$GITHUB_ACTION_PATH/bin/safemcp.js" "${args[@]}" --fail-on "$SAFEMCP_FAIL_ON"

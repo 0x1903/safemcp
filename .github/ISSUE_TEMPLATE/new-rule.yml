@@ -1,0 +1,12 @@
+name: New detection rule
+description: Suggest a risky pattern safemcp should catch
+labels: [new-rule]
+body:
+  - type: textarea
+    attributes: { label: Pattern, description: "What should be detected? Include an example config or tool description." }
+    validations: { required: true }
+  - type: textarea
+    attributes: { label: Why it's dangerous, description: Attack scenario or reference (blog post, CVE, paper). }
+    validations: { required: true }
+  - type: dropdown
+    attributes: { label: Suggested severity, options: [critical, high, medium, low] }

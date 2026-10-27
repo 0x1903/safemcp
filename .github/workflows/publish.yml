@@ -1,7 +1,7 @@
 name: publish
 on:
   push:
-    tags: ['v*']
+    tags: ['v*.*.*']
 
 # Trusted publishing (OIDC): no npm token is stored anywhere.
 permissions:

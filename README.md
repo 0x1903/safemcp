@@ -1,6 +1,6 @@
 # safemcp
 
-[![test](https://github.com/0x1903/safemcp/actions/workflows/test.yml/badge.svg)](https://github.com/0x1903/safemcp/actions/workflows/test.yml) [![npm](https://img.shields.io/npm/v/safemcp)](https://www.npmjs.com/package/safemcp) [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![test](https://github.com/0x1903/safemcp/actions/workflows/test.yml/badge.svg)](https://github.com/0x1903/safemcp/actions/workflows/test.yml) [![npm](https://img.shields.io/npm/v/safemcp)](https://www.npmjs.com/package/safemcp) [![downloads](https://img.shields.io/npm/dm/safemcp)](https://www.npmjs.com/package/safemcp) [![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](package.json) [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 **Is your AI agent setup safe?** One command scans every MCP server you've connected to Claude, Cursor, VS Code or Windsurf — and with `--live`, reads what each tool actually tells your model, catching tool poisoning, hidden instructions and rug pulls.
 
@@ -81,11 +81,32 @@ safemcp --fail-on high               # exit 1 on high+ findings (for CI)
 
 > **Note:** `--live` starts each configured stdio server (exactly as your AI client would) and connects to remote ones over Streamable HTTP. It only calls `initialize` and `tools/list` — never a tool. Servers that need OAuth are skipped.
 
-### CI
+## GitHub Action
+
+Block poisoned or risky MCP servers before they're merged into your repo:
 
 ```yaml
-- run: npx safemcp --file .mcp.json --live --fail-on high
+# .github/workflows/safemcp.yml
+name: safemcp
+on: [push, pull_request]
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: 0x1903/safemcp@v0.2.1
+        with:
+          live: true        # also check tool definitions
+          fail-on: high     # critical | high | medium | low
 ```
+
+By default it scans `.mcp.json`, `.cursor/mcp.json` and `.vscode/mcp.json`; set `files:` or `dir:` to change that. Or call the CLI directly: `npx safemcp --file .mcp.json --live --fail-on high`.
+
+## Contributing
+
+Found a poisoning pattern safemcp misses, or a false positive? [Open an issue](https://github.com/0x1903/safemcp/issues/new/choose) or see [CONTRIBUTING.md](CONTRIBUTING.md) — rules are small, self-contained and easy to add. Security issues: [SECURITY.md](SECURITY.md).
+
+If safemcp caught something in your setup, a ⭐ helps other people find it.
 
 ## Roadmap
 
