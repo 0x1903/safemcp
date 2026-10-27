@@ -42,9 +42,9 @@ export const AGENT_RULES = {
   },
   projectHooks: {
     id: 'AG006',
-    severity: 'medium',
-    title: 'Repository settings define hooks that run commands',
-    fix: 'Review these hooks before trusting the folder: they run shell commands automatically for everyone who opens it.',
+    severity: 'high',
+    title: 'Repository hook downloads or runs remote code',
+    fix: 'Hooks in a repository run automatically for everyone who trusts the folder. Pin and vendor what they run instead of fetching it at runtime.',
   },
   neverAsk: {
     id: 'AG007',
@@ -72,6 +72,11 @@ export const AGENT_RULES = {
   },
 };
 
+const REMOTE_CODE = /\b(?:curl|wget|Invoke-WebRequest|iwr|nc|ncat)\b|base64\s+(?:-d|--decode)|\beval\b|\|\s*(?:ba|z)?sh\b|https?:\/\//i;
+// "npx pkg" / "uvx pkg" without an exact version runs whatever was published last
+const unpinnedRunner = (cmd) =>
+  [...cmd.matchAll(/\b(?:npx|bunx|pnpx|uvx)\s+(?:-[\w-]+\s+)*([^\s;&|]+)/g)].some(([, pkg]) => !/@\d+\.\d+\.\d+|==\d/.test(pkg));
+
 function claudeSettings(cfg, raw) {
   const R = AGENT_RULES;
   const out = [];
@@ -80,9 +85,16 @@ function claudeSettings(cfg, raw) {
   if (raw.skipDangerousModePermissionPrompt === true) out.push(finding(R.skipBypassPrompt, 'skipDangerousModePermissionPrompt = true'));
   if (raw.enableAllProjectMcpServers === true) out.push(finding(R.allProjectServers, 'enableAllProjectMcpServers = true'));
   out.push(...allowRules(list(perms.allow), 'permissions.allow'));
+  // Lint/format hooks in a repo are normal team practice; fetching and running remote code is not.
   if (cfg.client === 'Claude Code settings (project)' && raw.hooks && typeof raw.hooks === 'object') {
-    const events = Object.keys(raw.hooks);
-    if (events.length) out.push(finding(R.projectHooks, `hooks on ${events.join(', ')}`));
+    for (const [event, matchers] of Object.entries(raw.hooks)) {
+      for (const m of Array.isArray(matchers) ? matchers : []) {
+        for (const h of Array.isArray(m?.hooks) ? m.hooks : []) {
+          const cmd = String(h?.command || '');
+          if (REMOTE_CODE.test(cmd) || unpinnedRunner(cmd)) out.push(finding(R.projectHooks, `${event}: ${cmd.slice(0, 100)}`));
+        }
+      }
+    }
   }
   return out;
 }

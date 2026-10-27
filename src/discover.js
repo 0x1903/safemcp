@@ -109,9 +109,17 @@ const MCP_FILE_NAMES = new Set([
 const AGENT_FILES = { '.codex': ['config.toml'], '.claude': ['settings.json', 'settings.local.json'], '.gemini': ['settings.json'] };
 const isAgentFile = (p) => (AGENT_FILES[path.basename(path.dirname(p))] || []).includes(path.basename(p));
 
+// Committed copies like ".mcp.json.bak" or "settings.json.backup.1777" often hold the real values.
+const COPY_SUFFIX = /\.(?:bak|backup|old|orig|save|prev|back|full|fixed|copy|template|example|sample|local|dist)(?:[.-][\w.-]*)?$/i;
+export const baseName = (p) => {
+  const b = path.basename(p);
+  return COPY_SUFFIX.test(b) && /\.json(?=\.)|\.toml(?=\.)/.test(b) ? b.replace(/(\.(?:json|toml))\..*$/, '$1') : b;
+};
+const withBase = (p) => path.join(path.dirname(p), baseName(p));
+
 // Which client a file belongs to, from its path (for --file / --dir, where we don't know it).
 export function inferClient(file) {
-  const base = path.basename(file);
+  const base = baseName(file);
   const parent = path.basename(path.dirname(file));
   const inHome = path.dirname(path.dirname(file)) === home;
   if (parent === '.codex' && base === 'config.toml') return inHome ? 'Codex' : 'Codex (project)';
@@ -138,7 +146,7 @@ export function findMcpFiles(dir, maxDepth = 8) {
     for (const e of entries) {
       const p = path.join(d, e.name);
       if (e.isDirectory() && depth < maxDepth && !SKIP_DIRS.has(e.name)) walk(p, depth + 1);
-      else if (e.isFile() && (MCP_FILE_NAMES.has(e.name) || isAgentFile(p))) found.push(p);
+      else if (e.isFile() && (MCP_FILE_NAMES.has(baseName(p)) || isAgentFile(withBase(p)))) found.push(p);
     }
   };
   walk(dir, 0);
@@ -177,14 +185,14 @@ export function loadConfig(client, file) {
   }
   let obj;
   try {
-    obj = file.endsWith('.toml') ? parseToml(text) : JSON.parse(stripJsonc(text));
+    obj = baseName(file).endsWith('.toml') ? parseToml(text) : JSON.parse(stripJsonc(text));
   } catch (e) {
     result.error = `Could not parse: ${e.message}`;
     return result;
   }
   let top = serversIn(obj);
   // Plugin .mcp.json files list servers at the top level, without an mcpServers wrapper
-  if (!Object.keys(top).length && path.basename(file) === '.mcp.json') {
+  if (!Object.keys(top).length && baseName(file) === '.mcp.json') {
     top = Object.fromEntries(Object.entries(obj).filter(([, v]) => looksLikeServer(v)));
   }
   result.raw = obj;

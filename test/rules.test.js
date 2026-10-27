@@ -57,6 +57,10 @@ test('MCP004: plain http to remote hosts only', () => {
   assert.ok(ids({ command: 'npx', args: ['mcp-remote@0.1.0', 'http://evil.example/mcp'] }).includes('MCP004'));
   assert.ok(!ids({ url: 'http://localhost:3000/mcp' }).includes('MCP004'));
   assert.ok(!ids({ url: 'http://127.0.0.1:3000/mcp' }).includes('MCP004'));
+  assert.ok(!ids({ url: 'http://192.168.0.222:8020/mcp' }).includes('MCP004'));
+  assert.ok(!ids({ url: 'http://10.1.2.3/mcp' }).includes('MCP004'));
+  assert.ok(!ids({ url: 'http://nas.local:8080/mcp' }).includes('MCP004'));
+  assert.ok(ids({ url: 'http://172.32.0.1/mcp' }).includes('MCP004'));
   assert.ok(!ids({ url: 'https://mcp.example.com/mcp' }).includes('MCP004'));
 });
 

@@ -20,6 +20,8 @@ const SECRET_PATTERNS = [
 const SECRET_NAME = /(api[_-]?key|token|secret|passw(?:or)?d|private[_-]?key|access[_-]?key|credential|auth)/i;
 // Values that reference the environment instead of embedding a secret.
 const ENV_REF = /^\$\{?[A-Za-z_][A-Za-z0-9_:]*\}?$|^\$\{(?:env|input):[^}]+\}$/;
+// Template values people commit in examples: "your-api-key", "<token>", "xxxx", "{{KEY}}", "changeme"…
+const PLACEHOLDER = /^(?:your|my)[\s_-]|[_-]here$|^<.*>$|^\{\{.*\}\}$|^\[.*\]$|^x{4,}|^\*{4,}|^\.{3}|^(?:changeme|placeholder|replace[_-]?me|insert|enter|example|dummy|test|todo|tbd|none|null|undefined|secret|token|api[_-]?key|sk-\.\.\.)\b/i;
 
 export function mask(value) {
   const v = String(value);
@@ -77,7 +79,13 @@ export function isPinned({ eco, spec }) {
 function isLocalHost(url) {
   try {
     const h = new URL(url).hostname.replace(/^\[|\]$/g, '');
-    return ['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(h) || h.endsWith('.localhost');
+    // Loopback and private-network (LAN) hosts: plain HTTP there doesn't cross the internet
+    return (
+      ['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(h) ||
+      /\.(?:localhost|local|lan|internal|home\.arpa)$/.test(h) ||
+      /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|169\.254\.)/.test(h) ||
+      /^f[cd][0-9a-f]{2}:/i.test(h)
+    );
   } catch {
     return false;
   }
@@ -130,7 +138,7 @@ export const RULES = [
             .replace(/\$\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*/g, '')
             .replace(/^(Bearer|Basic|Token)\s+/i, '')
             .trim();
-          if (SECRET_NAME.test(k) && literal.length >= 8 && !/\s/.test(literal))
+          if (SECRET_NAME.test(k) && literal.length >= 8 && !/\s/.test(literal) && !PLACEHOLDER.test(literal))
             out.push(`${where}.${k} looks like a literal secret: ${mask(literal)}`);
         }
       };
