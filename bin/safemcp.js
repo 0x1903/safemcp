@@ -5,6 +5,7 @@ import { printReport } from '../src/report.js';
 import { SEVERITIES } from '../src/rules.js';
 import { planPins, applyPins, checkPins } from '../src/pin.js';
 import { tildify } from '../src/discover.js';
+import { loadPins, savePins, pendingPins, acceptPins } from '../src/pins.js';
 
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
@@ -13,6 +14,7 @@ const HELP = `safemcp v${version} — scan MCP server configs for security risks
 Usage: safemcp [scan] [options]
        safemcp pin [--write] [--file <path>] [--dir <path>]
        safemcp pin --check [--file <path>] [--dir <path>]
+       safemcp accept [<server>...] [--all]
 
 Commands:
   scan (default)         Check MCP servers, agent settings and instruction files
@@ -22,6 +24,9 @@ Commands:
   pin --check            For pinned packages: is there a newer release, and does it show
                          supply-chain warning signs (new install script, lost provenance,
                          different publisher, very fresh, size jump)? Exits 1 on high signals.
+  accept                 After reviewing a TP007/TP008 change from --live, accept the server's
+                         new tool definitions as the baseline. Without arguments, lists what
+                         is waiting. Until accepted, the change is reported on every --live scan.
 
 Options:
   -f, --file <path>      Scan a specific config file (repeatable). Default: auto-detect
@@ -43,12 +48,15 @@ Options:
 Secrets are always masked in output.`;
 
 function parseArgs(argv) {
-  const opts = { command: 'scan', files: [], dirs: [], toolsFiles: [], json: false, failOn: null, live: false, pin: true, timeout: 20, write: false };
+  const opts = { command: 'scan', servers: [], files: [], dirs: [], toolsFiles: [], json: false, failOn: null, live: false, pin: true, timeout: 20, write: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === 'scan' && i === 0) continue;
     else if (a === 'pin' && i === 0) opts.command = 'pin';
     else if (a === '--write') opts.write = true;
+    else if (a === 'accept' && i === 0) opts.command = 'accept';
+    else if (a === '--all' && opts.command === 'accept') opts.all = true;
+    else if (opts.command === 'accept' && !a.startsWith('-')) opts.servers.push(a);
     else if (a === '--check') opts.check = true;
     else if (a === '-h' || a === '--help') opts.help = true;
     else if (a === '-v' || a === '--version') opts.version = true;
@@ -89,6 +97,36 @@ if (opts.version) {
 if (opts.command === 'pin') {
   await pin(opts);
   process.exit(0);
+}
+if (opts.command === 'accept') {
+  accept(opts);
+  process.exit(process.exitCode || 0);
+}
+
+function accept({ servers, all, json }) {
+  const pins = loadPins();
+  const pending = pendingPins(pins);
+  if (!servers.length && !all) {
+    if (json) console.log(JSON.stringify(pending, null, 2));
+    else if (!pending.length) console.log('\nNothing to accept: no tool changes are waiting for review.\n');
+    else {
+      console.log('\nTool changes waiting for review (see `safemcp --live` for what changed):\n');
+      for (const p of pending) console.log(`  ${p.server}: ${p.tools.join(', ')}  (${tildify(p.key.slice(0, p.key.indexOf('#')))})`);
+      console.log('\nRun `safemcp accept <server>` for each one you have reviewed, or `safemcp accept --all`.\n');
+    }
+    return;
+  }
+  const unknown = servers.filter((s) => !pending.some((p) => p.server === s));
+  const accepted = acceptPins(pins, all ? null : servers);
+  savePins(pins);
+  if (json) console.log(JSON.stringify({ accepted, unknown }, null, 2));
+  else {
+    console.log();
+    for (const a of accepted) console.log(`  \u2713 ${a.server}: accepted ${a.tools.join(', ')}`);
+    for (const s of unknown) console.log(`  ${s}: nothing waiting (run \`safemcp accept\` to list)`);
+    console.log();
+  }
+  if (unknown.length) process.exitCode = 1;
 }
 
 async function pin({ files, dirs, write, json, check }) {

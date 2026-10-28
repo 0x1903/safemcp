@@ -91,7 +91,7 @@ export async function addLive(result, { timeoutMs = 20000, pin = true, onProgres
   for (const { cfg, s } of targets) {
     if (!s.live.tools) continue;
     s.findings.push(...checkTools(s.name, s.live.tools, allTools));
-    s.findings.push(...diffPins(pins, `${cfg.file}#${s.scope || ''}#${s.name}`, s.live.tools));
+    s.findings.push(...diffPins(pins, `${cfg.file}#${s.scope || ''}#${s.name}`, s.live.tools, s.name));
     s.live = { tools: s.live.tools.length, serverInfo: s.live.serverInfo };
   }
   if (pin) savePins(pins);
